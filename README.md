@@ -81,6 +81,23 @@ These tools are provided by DSH/the selected profile, not implemented or install
 
 Only IDs returned by tools or explicitly supplied by the user may become links. To get a conversation link yourself, open it and copy the address bar with Follow enabled. Workspace IDs must come from a workspace-aware tool or the instance's workspace data; directory names and display titles are not workspace IDs.
 
+## Recommended companion: incremental session search
+
+For **DSH 0.2.1-alpha.3**, consider [dsh-session-search-incremental](https://github.com/victorwads/dsh-session-search-incremental) alongside this plugin when you want bounded background indexing for session discovery. The two packages address different parts of the workflow:
+
+- **dsh-session-search-incremental** supplies an experimental incremental search provider behind DSH's existing session tools.
+- **dsh-deeplink** guides the model to use the exposed search/read/trace tools, then turns discovered session/workspace IDs into portable, same-tab links.
+
+They are **optional companions, not runtime dependencies of one another**. Deep links work with the standard DSH search provider; incremental search does not require the deep-link UI. The search plugin has **eventually consistent results that may be stale or incomplete**, pins DSH peer versions and uses private engine methods. Read its compatibility, installation, database-writer and rollback instructions before enabling it. An empty search result is not proof that a conversation does not exist.
+
+Once both npm packages have been published, install them into the same Web profile with:
+
+```sh
+dsh plugin --profile web add dsh-deeplink dsh-session-search-incremental
+```
+
+Place the incremental search bundle **after** the official base/search bundles, use only one provider/writer for its derived database, and restart the existing DSH process. Do not enable both the upstream scoped deep-link package and the community unscoped package at the same time.
+
 ## Development and validation
 
 No dependency installation or build is needed:
