@@ -30,6 +30,46 @@ npm pack --dry-run
 
 The prepack hook runs syntax and behavior tests automatically. Run the optional installed-DSH smoke test separately as documented below. The packaged file list excludes tests, development caches and local conversation data.
 
+## Publishing and CI
+
+The workflows follow the same separation used by dsh-live-voice: **CI** validates pushes/PRs; **Publish to npm** is manual, main-only, protected by the GitHub environment `npm`, and authenticates with npm Trusted Publishing (OIDC), not a stored npm token. This single-package repository has no build/dependency-install step.
+
+CI runs syntax/tests and checks the exact six-file npm package allowlist. The publish workflow additionally checks name/repository/version, derives the dist-tag (`latest` for stable versions), rejects an already published version or existing Git tag, runs a dry run, publishes with provenance, and then creates the version tag and GitHub Release. Creating the tag **after** successful npm publication avoids leaving a release tag when publication fails. If release/tag creation fails after npm succeeds, repair that metadata manually; do not republish the same version.
+
+### First publication from your terminal
+
+Use the **unscoped npm branch**, not the upstream compatibility checkout whose manifest is still `@dsh-community/dsh-deeplink`. An isolated checkout keeps your linked running DSH plugin unchanged:
+
+```sh
+git clone --branch chore/npm-dsh-deeplink https://github.com/victorwads/dsh-deeplink.git dsh-deeplink-release
+cd dsh-deeplink-release
+node --version
+npm login --registry=https://registry.npmjs.org/
+npm whoami --registry=https://registry.npmjs.org/
+npm run check
+npm test
+npm run check:release
+npm pack --dry-run
+# This next command actually publishes dsh-deeplink@0.7.0; review before running:
+npm publish --access public --tag latest --registry=https://registry.npmjs.org/
+```
+
+Use Node 24 for parity with CI (the plugin supports Node 22+). No dependency installation is required for this package. The first local publish uses your npm login/2FA and does not request CI provenance. A registry 404 is not a guarantee that npm will permit claiming a name. Confirm the account and package identity before publishing; never paste credentials into repository files.
+
+### Subsequent manual Actions releases
+
+1. Merge the community npm branch into **your fork's main** (not upstream); the workflow intentionally refuses publication from other branches/repos.
+2. Create the GitHub environment **npm**, preferably with required reviewers and main-only deployment rules.
+3. After the package exists, configure its npm Trusted Publisher: GitHub owner **victorwads**, repository **dsh-deeplink**, workflow **publish.yml**, environment **npm**. See [npm Trusted Publishing](https://docs.npmjs.com/trusted-publishers/).
+4. Commit a new, unpublished version before each later release; this workflow will not republish the initial 0.7.0 version.
+5. From your terminal, after CI succeeds on main:
+
+```sh
+gh workflow run publish.yml --repo victorwads/dsh-deeplink --ref main
+```
+
+The last command triggers a real publication after any environment approval. No workflow has been dispatched and no npm release has been performed as part of this preparation.
+
 ## Install this checkout
 
 Use the profile that serves your Web GUI (replace `web` if yours has another name):

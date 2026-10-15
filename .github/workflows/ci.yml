@@ -1,0 +1,19 @@
+name: CI
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Run syntax and automated tests
+        run: npm run check && npm test
+      - name: Validate release metadata and package contents
+        run: node scripts/check-release.mjs

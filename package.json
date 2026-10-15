@@ -45,6 +45,7 @@
   ],
   "scripts": {
     "test": "node --test",
+    "check:release": "node scripts/check-release.mjs",
     "prepack": "npm run check && npm test",
     "check": "node --check lib/index.js && node --check lib/client.js"
   },
