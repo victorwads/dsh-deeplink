@@ -4,6 +4,32 @@ Open a specific DeepSeek Harness conversation or workspace from a URL, and keep 
 
 **Compatibility target:** DSH **0.2.1-alpha.3**, Node.js **22+**. Version 0.7.0 uses the current split Controller / UI services and Plugins detail-page API. Older DSH versions using the removed client-runtime or settings namespace APIs are not supported by this release.
 
+## Community npm distribution (prepared, not published)
+
+This branch prepares the unscoped **dsh-deeplink** npm package from [victorwads/dsh-deeplink](https://github.com/victorwads/dsh-deeplink), based on the original [qyw233/dsh-deeplink](https://github.com/qyw233/dsh-deeplink) project. It is a community distribution, not an official upstream npm release. Original MIT attribution is preserved. The compatibility contribution is tracked in [upstream PR #3](https://github.com/qyw233/dsh-deeplink/pull/3).
+
+**Preparation is not publication.** The package name must be available to the publishing npm account, authentication/ownership must be verified, and publication needs a separate explicit decision. No publication or ownership transfer has been performed. Upstream maintainers may be invited as collaborators or package ownership discussed later, subject to npm permissions and their agreement.
+
+The npm identity is used consistently by the package manifest, Cordis patch, browser module loader and bundle settings key. Do not enable this package alongside the upstream scoped package: both own the same deep-link behavior, prompt name and browser-local preference keys.
+
+After an actual release, installation would be:
+
+```sh
+dsh plugin --profile web add dsh-deeplink
+```
+
+When switching from the upstream scoped package, remove/disable the old bundle first and install this one, then restart DSH and refresh. Do not only rename a live profile dependency by hand.
+
+Release preparation checks (no publication):
+
+```sh
+npm run check
+npm test
+npm pack --dry-run
+```
+
+The prepack hook runs syntax and behavior tests automatically. Run the optional installed-DSH smoke test separately as documented below. The packaged file list excludes tests, development caches and local conversation data.
+
 ## Install this checkout
 
 Use the profile that serves your Web GUI (replace `web` if yours has another name):
@@ -45,7 +71,7 @@ Append the parameter to the actual URL of your DSH instance:
 
 ## Settings
 
-Open **Plugins**, then the **dsh-deeplink bundle's detail page**. Its **Deep links** settings appear through the current `plugins.bundle.config` slot, keyed by `@dsh-community/dsh-deeplink`. The old Settings → Plugins → Plugin configuration card API has been removed from current DSH.
+Open **Plugins**, then the **dsh-deeplink bundle's detail page**. Its **Deep links** settings appear through the current `plugins.bundle.config` slot, keyed by `dsh-deeplink`. The old Settings → Plugins → Plugin configuration card API has been removed from current DSH.
 
 Both toggles default to on, are saved immediately in this browser's `localStorage`, and retain the keys used by earlier releases:
 

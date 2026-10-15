@@ -1,6 +1,21 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
 import { deeplinkPrompt } from '../lib/index.js';
+
+test('distribution identity matches the host patch and browser loader', () => {
+  const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  const patch = readFileSync(new URL('../cordis.patch.yml', import.meta.url), 'utf8');
+  const source = readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8');
+  let id;
+  vm.runInNewContext(source, { window: { __ModuleLoader__: { load(definition) { id = definition.id; } } } });
+  assert.equal(manifest.name, 'dsh-deeplink');
+  assert.equal(id, manifest.name);
+  assert(patch.includes("name: '" + manifest.name + "'"));
+  assert.equal(manifest.publishConfig.access, 'public');
+  assert.equal(manifest.repository.url, 'git+https://github.com/victorwads/dsh-deeplink.git');
+});
 
 test('advertised IPv6 origin is preserved', () => {
   assert(deeplinkPrompt('https://[::1]:3080').includes('https://[::1]:3080/?session='));

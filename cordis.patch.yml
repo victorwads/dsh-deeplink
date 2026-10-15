@@ -7,4 +7,4 @@
 
 - insert:
     - id: dsh-deeplink
-      name: '@dsh-community/dsh-deeplink'
+      name: 'dsh-deeplink'
