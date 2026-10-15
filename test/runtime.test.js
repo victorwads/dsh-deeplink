@@ -15,17 +15,11 @@ test('installed DSH: real Cordis lifecycle, prompt assembly, slot contract and p
   const manifest = require(resolve('package.json'));
   for (const name of manifest.dsh.client.inject) assert(require.resolve(name + '/client'));
   const ctx = new Context();
-  let ready = false;
-  ctx.provide('webApp', { getAdvertisedUrl() {
-    assert(ready, 'URL must not be read at apply time');
-    return 'https://example.com/dsh/';
-  } });
   const promptFiber = await ctx.plugin(SystemPrompt, {});
   const fiber = await ctx.plugin(plugin);
-  ready = true;
   const assembled = await ctx.systemPrompt.assemble();
   const section = assembled.sections.find(section => section.name === 'plugin:dsh-deeplink');
-  assert(section.text.includes('https://example.com/dsh/?session='));
+  assert(section.text.includes('https://dsh.invalid/?session='));
   await fiber.dispose();
   assert(!(await ctx.systemPrompt.assemble()).sections.some(section => section.name === 'plugin:dsh-deeplink'));
   await promptFiber.dispose();

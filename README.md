@@ -40,25 +40,30 @@ Append the parameter to the actual URL of your DSH instance:
 - A workspace link follows the current DSH new-conversation flow: it is **not** a guarantee of opening the latest existing conversation.
 - After navigation, the URL follows the main conversation using `history.replaceState`, without adding browser history entries or reloading. Background agents and sidebar references do not become the selected link.
 - Clearing the main conversation removes the plugin's parameters. Other query parameters, the URL hash, the proxy base path, and the existing history state are preserved.
-- HTTP(S) links rendered in conversations normally open a new tab; pasting a URL into the address bar navigates that tab.
+- In-conversation plugin links open **in the same tab** by default, through the UI navigation service, without a page reload. Ctrl/Cmd/Shift-click, middle-click and the context menu can still use native tab/window behavior.
+- For generated Markdown, use `[Open conversation](https://dsh.invalid/?session=<encoded-id>)` or `[Open workspace](https://dsh.invalid/?workspace=<encoded-id>)`. The reserved `.invalid` host is a plugin marker, not a server or a network destination. The browser rewrites it to its **current origin, port and application path**, including HTTPS/reverse proxies. It requires this plugin to be enabled; use the resulting address-bar URL for sharing outside the GUI.
+- Bare `?session=` Markdown links do not work in the current DSH renderer's URL allowlist. The absolute marker is intentionally used to pass that allowlist without guessing a browser hostname.
+- Existing same-app links are intercepted too. Old localhost/127.0.0.1/IPv6-loopback root links are resolved locally only for a target known in this instance; arbitrary external instances are not intercepted. Other links retain DSH's normal behavior.
 - Links do not bypass authentication or grant access. Use the URL of an instance the recipient can actually reach, and do not share authentication tokens.
 
 ## Settings
 
 Open **Plugins**, then the **dsh-deeplink bundle's detail page**. Its **Deep links** settings appear through the current `plugins.bundle.config` slot, keyed by `@dsh-community/dsh-deeplink`. The old Settings → Plugins → Plugin configuration card API has been removed from current DSH.
 
+The UI has **not been removed**: its two options were migrated from the retired settings card slot to the bundle detail page. Only the old namespace registration and reliance on private hashed CSS classes were removed.
+
 Both toggles default to on, are saved immediately in this browser's `localStorage`, and retain the keys used by earlier releases:
 
 | Toggle | Storage key | Effect |
 |---|---|---|
-| Open linked conversation | `dsh-deeplink.jump` | Process URL targets on page load; reload/open a link after changing it. |
+| Open linked conversation | `dsh-deeplink.jump` | Process URL targets on page load and handle portable/same-app Markdown links. Page-load target changes require reloading; click handling reads the flag live. |
 | Follow current conversation | `dsh-deeplink.follow` | Update the address bar; changing it takes effect immediately. |
 
 These are browser-local preferences, not host/profile configuration. There is no host settings schema or save button. Styles are owned by the plugin rather than relying on private, hashed DSH CSS class names.
 
 ## Model prompt and IDs
 
-The host registers `plugin:dsh-deeplink` as a system-prompt section. It reads `webApp.getAdvertisedUrl()` lazily, after the listener can be bound, respecting HTTPS, IPv6, and a configured reverse-proxy public URL/base path rather than assuming localhost and a fixed port.
+The host registers `plugin:dsh-deeplink` as a static system-prompt section with the portable `https://dsh.invalid/` marker. It does not embed the server-advertised URL: only the browser knows whether the user arrived through localhost, another port, HTTPS, or a proxy prefix. The browser rewrites recognized anchors and captures normal clicks before DSH's external-link delegate, navigating through `uiWorkspace` in the current tab.
 
 The prompt guides the model through the indexed session tools **when they are exposed by the current profile**:
 
@@ -101,7 +106,8 @@ Manual check after installing/restarting your profile:
 2. Open a known `?workspace=` link and confirm it creates/reuses a blank there.
 3. Switch conversations and check the URL follows; unknown/archived targets must not open.
 4. Open the plugin bundle's detail page and test both toggles independently.
-5. Test at the advertised public URL if using HTTPS or a reverse proxy.
+5. Click a portable Markdown link at both a localhost alternate port and an HTTPS/proxy URL. Confirm the current origin/path stays unchanged, the normal click stays in this tab, and Ctrl/Cmd-click opens the resolved local URL.
+6. Confirm the two settings switches remain available in the bundle detail page.
 
 Automated smoke tests do not replace this installed-browser check. A client-plugin HMR receiver alone does not guarantee rebuilt bundles: automatic updates also require the DSH checkout's active `pnpm run dev:web` watcher. Otherwise reinstall/restart/refresh as above. Host changes always require a DSH restart.
 
@@ -116,7 +122,7 @@ Automated smoke tests do not replace this installed-browser check. A client-plug
 - Replace the removed client-runtime package edge with current Controller, renderer, layout, workspace UI, and plugin-manager packages.
 - Navigate through `uiWorkspace.openSession/openWorkspace`; follow main-view retention instead of removed `sessions.list.current` / `sessions.open` APIs.
 - Replace removed `settings.register` / `settings.plugin.item` with browser-local settings on `plugins.bundle.config`; remove the undeclared schemastery import and private DSH CSS classes.
-- Use the advertised Web app URL lazily for model links, including HTTPS/proxy paths; remove obsolete storage-file discovery instructions.
+- Use portable Markdown destinations resolved against the browser URL rather than the advertised server origin; preserve local ports, HTTPS/proxy paths and same-tab navigation. Remove obsolete storage-file discovery instructions.
 - Preserve unrelated query/hash/history state, handle async failures and disposal, and add unit/runtime smoke tests.
 - Guide the model through indexed prior-session search, current-session event search, exact reads, lineage, and replacement checks without relying on private storage layouts.
 

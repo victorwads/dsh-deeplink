@@ -2,8 +2,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { deeplinkPrompt } from '../lib/index.js';
 
-test('advertised IPv6 origin is preserved', () => {
-  assert(deeplinkPrompt('https://[::1]:3080').includes('https://[::1]:3080/?session='));
+test('prompt uses a portable marker and same-tab default instead of guessed origins', () => {
+  const prompt = deeplinkPrompt();
+  assert(prompt.includes('https://dsh.invalid/?session='));
+  assert(prompt.includes('SAME tab by default'));
+  assert(prompt.includes('CURRENT browser origin, port and application path'));
+  assert(prompt.includes('Do not substitute localhost'));
 });
 
 test('prompt distinguishes prior-session search from current-conversation event search', () => {
