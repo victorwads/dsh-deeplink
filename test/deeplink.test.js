@@ -43,7 +43,13 @@ function harness({ url = 'http://localhost:3080/', flags = {}, ready = true, ope
     addEventListener(name, listener) { events.set(name, listener); },
     removeEventListener(name) { events.delete(name); },
   };
+  const anchors = [];
+  const documentEvents = new Map();
   const document = {
+    documentElement: {},
+    querySelectorAll: () => anchors,
+    addEventListener: (name, listener) => documentEvents.set(name, listener),
+    removeEventListener: name => documentEvents.delete(name),
     createElement: () => { const node = { dataset: {}, remove() { styles.delete(node); } }; return node; },
     head: { appendChild(node) { styles.add(node); } },
   };
@@ -58,6 +64,7 @@ function harness({ url = 'http://localhost:3080/', flags = {}, ready = true, ope
   ) });
   vm.runInNewContext(source, {
     window, document, history, URL, URLSearchParams,
+    MutationObserver: class { observe() {} disconnect() {} },
     get location() { return currentUrl; },
     localStorage: {
       getItem(key) { if (storageUnavailable) throw new Error('blocked'); return storage.get(key) ?? null; },
@@ -79,7 +86,26 @@ function harness({ url = 'http://localhost:3080/', flags = {}, ready = true, ope
     },
   };
   module.apply(ctx);
-  return { module, list, workspaces, select, storage, warnings, calls, history, styles, events, registrations,
+  const anchor = (href, attributes = {}) => {
+    const attrs = new Map(Object.entries({ href, target: '_blank', ...attributes }));
+    const node = {
+      getAttribute: key => attrs.get(key) ?? null,
+      hasAttribute: key => attrs.has(key),
+      setAttribute: (key, value) => attrs.set(key, value),
+      removeAttribute: key => attrs.delete(key),
+      closest: () => node, isConnected: true,
+    };
+    anchors.push(node);
+    return node;
+  };
+  const click = (node, extra = {}) => {
+    const event = { target: node, button: 0, defaultPrevented: false,
+      preventDefault() { this.defaultPrevented = true; },
+      stopImmediatePropagation() { this.stopped = true; }, ...extra };
+    documentEvents.get('click')?.(event);
+    return event;
+  };
+  return { module, list, workspaces, select, storage, warnings, calls, history, styles, events, registrations, anchor, click, documentEvents,
     url: () => currentUrl, dispose: () => { for (const off of effects.reverse()) off?.(); } };
 }
 
@@ -89,25 +115,23 @@ test('manifest references current packages, no removed runtime or external depen
   assert.equal(manifest.dependencies, undefined);
 });
 
-test('host uses lazy advertised URL and disposes its section without settings.register', () => {
-  let bound = false;
+test('host registers portable prompt without server URL and disposes it', () => {
   let section;
   let dispose;
   let removed = false;
-  assert.deepEqual(hostInject, ['systemPrompt', 'webApp']);
+  assert.deepEqual(hostInject, ['systemPrompt']);
   applyHost({
-    webApp: { getAdvertisedUrl() { assert(bound); return 'https://example.com/dsh/'; } },
     systemPrompt: { section(value) { section = value; return () => { removed = true; }; } },
     effect(factory) { dispose = factory(); },
   });
-  bound = true;
-  assert(section.text().includes('https://example.com/dsh/?session='));
+  assert(section.text.includes('https://dsh.invalid/?session='));
   dispose(); assert(removed);
 });
 
-test('prompt preserves HTTPS/proxy path, strips secrets and avoids obsolete disk instructions', () => {
+test('prompt never embeds a server origin or private storage instructions', () => {
   const prompt = deeplinkPrompt('https://example.com/proxy/?token=secret#auth');
-  assert(prompt.includes('https://example.com/proxy/?workspace=<workspaceId>'));
+  assert(prompt.includes('https://dsh.invalid/?workspace=<workspaceId>'));
+  assert(!prompt.includes('https://example.com'));
   assert(!prompt.includes('secret'));
   assert(!prompt.includes('storages/workspace.json'));
 });
@@ -243,6 +267,90 @@ test('unavailable localStorage falls back to defaults without crashing', () => {
   assert.equal(h.url().search, '?session=target');
   const tree = h.registrations[0].component();
   assert.doesNotThrow(() => tree.children[3].children[1].props.onClick());
+  h.dispose();
+});
+
+for (const origin of ['http://localhost:3081/', 'https://dsh.wads.dev/', 'https://example.com/proxy/dsh/']) {
+  test('portable Markdown link stays on current browser URL: ' + origin, () => {
+    const h = harness({ url: origin + '?theme=dark#anchor' });
+    const a = h.anchor('https://dsh.invalid/?session=target');
+    const event = h.click(a);
+    assert(event.defaultPrevented); assert(event.stopped);
+    assert.equal(a.getAttribute('target'), '_self');
+    const resolved = new URL(a.getAttribute('href'));
+    assert.equal(resolved.origin, new URL(origin).origin);
+    assert.equal(resolved.pathname, new URL(origin).pathname);
+    assert.equal(resolved.searchParams.get('session'), 'target');
+    assert.equal(resolved.searchParams.get('theme'), 'dark');
+    assert.equal(resolved.hash, '#anchor');
+    assert.equal(h.url().origin, new URL(origin).origin);
+    assert.equal(h.url().searchParams.get('session'), 'target');
+    h.dispose();
+    assert.equal(a.getAttribute('href'), 'https://dsh.invalid/?session=target');
+    assert.equal(a.getAttribute('target'), '_blank');
+    assert.equal(h.documentEvents.size, 0);
+  });
+}
+
+test('legacy loopback links for known targets stay on current HTTPS instance', () => {
+  const h = harness({ url: 'https://dsh.wads.dev/' });
+  const event = h.click(h.anchor('http://127.0.0.1:3080/?session=target'));
+  assert(event.defaultPrevented);
+  assert.equal(h.url().href, 'https://dsh.wads.dev/?session=target');
+  h.dispose();
+});
+
+test('unrelated or unsafe links, downloads and unknown cross-instance targets are not intercepted', () => {
+  const h = harness({ url: 'https://dsh.wads.dev/' });
+  for (const href of ['https://other-dsh.example/?session=target', 'http://localhost:3080/?session=unknown', 'https://dsh.invalid.evil/?session=target', 'javascript:alert(1)', 'https://dsh.invalid/path?session=target']) {
+    const a = h.anchor(href);
+    assert.equal(h.click(a).defaultPrevented, false);
+    assert.equal(a.getAttribute('href'), href);
+  }
+  assert.equal(h.click(h.anchor('https://dsh.invalid/?session=target', { download: '' })).defaultPrevented, false);
+  h.dispose();
+});
+
+test('modified and middle clicks retain native tab behavior with resolved local URL', () => {
+  const h = harness({ url: 'https://dsh.wads.dev/' });
+  for (const modifier of [{ ctrlKey: true }, { metaKey: true }, { shiftKey: true }, { button: 1 }]) {
+    const a = h.anchor('https://dsh.invalid/?session=target');
+    assert.equal(h.click(a, modifier).defaultPrevented, false);
+    assert.equal(a.getAttribute('href'), 'https://dsh.wads.dev/?session=target');
+  }
+  assert.equal(h.calls.length, 0);
+  h.dispose();
+});
+
+test('workspace marker opens through UI and jump off does not intercept links', async () => {
+  const h = harness();
+  assert(h.click(h.anchor('https://dsh.invalid/?workspace=workspace')).defaultPrevented);
+  assert.deepEqual(h.calls, [['workspace', 'workspace']]);
+  await tick(); h.dispose();
+  const h2 = harness({ flags: { 'dsh-deeplink.jump': '0' } });
+  assert.equal(h2.click(h2.anchor('https://dsh.invalid/?session=target')).defaultPrevented, false);
+  h2.dispose();
+});
+
+test('a stale workspace request cannot settle or overwrite a later Markdown navigation', async () => {
+  const pending = [];
+  const h = harness({ openWorkspace(beforeOpen) { return new Promise(resolve => pending.push({ beforeOpen, resolve })); } });
+  h.click(h.anchor('https://dsh.invalid/?workspace=workspace'));
+  h.click(h.anchor('https://dsh.invalid/?session=target'));
+  assert.throws(() => pending[0].beforeOpen('old'), /superseded/);
+  pending[0].resolve(); await tick();
+  assert.equal(h.url().searchParams.get('session'), 'target');
+  h.dispose();
+});
+
+test('same-origin query link is intercepted and encoded IDs are decoded once', () => {
+  const h = harness({ url: 'https://dsh.wads.dev/' });
+  const list = h.list.getSnapshot();
+  const id = 'session /+ç';
+  h.list.set({ ...list, ids: [...list.ids, id], byId: { ...list.byId, [id]: { id, retainedBy: {} } } });
+  const event = h.click(h.anchor('?session=' + encodeURIComponent(id)));
+  assert(event.defaultPrevented);
+  assert.equal(h.url().searchParams.get('session'), id);
   h.dispose();
 });
 
