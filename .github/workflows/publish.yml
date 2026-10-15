@@ -1,0 +1,61 @@
+name: Publish to npm
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: npm-publish
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main' && github.repository == 'victorwads/dsh-deeplink'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: npm
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install OIDC-capable npm
+        run: npm install --global npm@11.10.1
+      - name: Run syntax and automated tests
+        run: npm run check && npm test
+      - name: Validate metadata, package contents and unpublished version
+        id: release
+        env:
+          CHECK_REGISTRY: '1'
+        run: node scripts/check-release.mjs
+      - name: Reject existing Git tag
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.git_tag }}
+        run: |
+          refs=$(git ls-remote --tags origin "refs/tags/$RELEASE_TAG")
+          if [[ -n "$refs" ]]; then echo "Tag already exists; bump package version."; exit 1; fi
+      - name: Validate npm publication without publishing
+        env:
+          DIST_TAG: ${{ steps.release.outputs.tag }}
+        run: npm publish --dry-run --access public --tag "$DIST_TAG" --registry=https://registry.npmjs.org/
+      - name: Publish using OIDC
+        env:
+          DIST_TAG: ${{ steps.release.outputs.tag }}
+        run: npm publish --provenance --access public --tag "$DIST_TAG" --registry=https://registry.npmjs.org/
+      - name: Create version tag after successful publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.git_tag }}
+        run: gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" -f "ref=refs/tags/$RELEASE_TAG" -f "sha=$GITHUB_SHA"
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.git_tag }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          flags=()
+          if [[ "$VERSION" == *-* ]]; then flags+=(--prerelease --latest=false); fi
+          gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --title "$RELEASE_TAG" --generate-notes "${flags[@]}"

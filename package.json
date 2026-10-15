@@ -1,7 +1,19 @@
 {
-  "name": "@dsh-community/dsh-deeplink",
-  "version": "0.6.1",
-  "description": "DSH WebUI 深链：用 ?session=<会话id> 或 ?workspace=<工程id> 直接打开指定项目对话",
+  "name": "dsh-deeplink",
+  "version": "0.7.0",
+  "description": "Community distribution of the DSH Web UI deep-link plugin, updated for current DSH APIs and indexed session discovery.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/victorwads/dsh-deeplink.git"
+  },
+  "homepage": "https://github.com/victorwads/dsh-deeplink",
+  "bugs": {
+    "url": "https://github.com/victorwads/dsh-deeplink/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -15,7 +27,12 @@
     },
     "client": {
       "inject": [
-        "@deepseek-ai/dsh-client-runtime"
+        "@deepseek-ai/dsh-api-session-controller",
+        "@deepseek-ai/dsh-api-workspace-controller",
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-workspace",
+        "@deepseek-ai/dsh-client-ui-plugin-manager"
       ],
       "platform": "web"
     }
@@ -26,5 +43,14 @@
     "README.md",
     "cordis.patch.yml"
   ],
+  "scripts": {
+    "test": "node --test",
+    "check:release": "node scripts/check-release.mjs",
+    "prepack": "npm run check && npm test",
+    "check": "node --check lib/index.js && node --check lib/client.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
   "license": "MIT"
 }
